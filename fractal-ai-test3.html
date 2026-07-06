@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fractal AI Test 3 — Navigator Edition</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --panel: rgba(18, 21, 30, 0.92);
+    --panel-border: #2a2f3e;
+    --text: #d6dae3;
+    --text-dim: #8a90a0;
+    --accent: #6cf8d2;
+    --accent2: #6c9ef8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); }
+  #glcanvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+  #glcanvas.dragging { cursor: grabbing; }
+
+  #panel {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 330px;
+    background: var(--panel); border-right: 1px solid var(--panel-border);
+    backdrop-filter: blur(8px);
+    overflow-y: auto; padding: 14px 16px 190px;
+    transition: transform 0.25s ease;
+    z-index: 10;
+  }
+  #panel.hidden { transform: translateX(-100%); }
+  #togglePanel {
+    position: fixed; top: 12px; left: 342px; z-index: 11;
+    background: var(--panel); color: var(--text); border: 1px solid var(--panel-border);
+    border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 14px;
+    transition: left 0.25s ease;
+  }
+  #panel.hidden ~ #togglePanel { left: 12px; }
+
+  h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 2px;
+       background: linear-gradient(90deg, var(--accent), var(--accent2));
+       -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .subtitle { font-size: 11px; color: var(--text-dim); margin-bottom: 12px; }
+
+  details { border: 1px solid var(--panel-border); border-radius: 8px; margin-bottom: 10px; background: rgba(255,255,255,0.02); }
+  summary { cursor: pointer; padding: 8px 10px; font-size: 13px; font-weight: 600; user-select: none; list-style: none; }
+  summary::before { content: "▸ "; color: var(--accent); }
+  details[open] summary::before { content: "▾ "; }
+  .section-body { padding: 4px 10px 10px; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; margin: 7px 0; gap: 8px; }
+  .row label { font-size: 12px; color: var(--text); flex: 0 0 104px; }
+  .row .val { font-size: 11px; color: var(--text-dim); flex: 0 0 40px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 4px; }
+  input[type=color] { width: 42px; height: 26px; border: none; border-radius: 4px; background: none; cursor: pointer; padding: 0; }
+  select, button.btn {
+    background: #1c2130; color: var(--text); border: 1px solid var(--panel-border);
+    border-radius: 6px; padding: 5px 8px; font-size: 12px; flex: 1; cursor: pointer; min-width: 0;
+  }
+  button.btn:hover { border-color: var(--accent); }
+  button.btn.active { background: var(--accent); color: #0d0f14; font-weight: 600; }
+  .hint { font-size: 10.5px; color: var(--text-dim); line-height: 1.5; margin-top: 6px; }
+  #fps { position: fixed; bottom: 10px; right: 12px; font-size: 11px; color: var(--text-dim); z-index: 5;
+         background: rgba(13,15,20,0.6); padding: 3px 8px; border-radius: 4px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 7px 0; }
+  .checkbox-row label { font-size: 12px; cursor: pointer; }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+  .slot {
+    border: 1px solid var(--panel-border); border-left: 3px solid var(--accent2);
+    border-radius: 6px; padding: 6px 8px; margin: 8px 0; background: rgba(108,158,248,0.04);
+  }
+  .slot.s2 { border-left-color: #f86cc7; background: rgba(248,108,199,0.04); }
+  .slot.s3 { border-left-color: var(--accent); background: rgba(108,248,210,0.04); }
+  .slot .slot-title { font-size: 11px; font-weight: 600; color: var(--text-dim); margin-bottom: 4px; letter-spacing: 0.4px; }
+
+  /* ---------- 3D navigation pad (bottom-left) ---------- */
+  #navpad {
+    position: fixed; left: 12px; bottom: 12px; z-index: 12;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 14px; padding: 10px 12px;
+    backdrop-filter: blur(8px);
+    user-select: none; touch-action: none;
+  }
+  #joystick {
+    position: relative; width: 106px; height: 106px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 40%, #232a3c, #171c29);
+    border: 1px solid #333b52; cursor: pointer;
+    flex: none;
+  }
+  #joystick::before {
+    content: ""; position: absolute; inset: 8px; border-radius: 50%;
+    border: 1px dashed #333b52;
+  }
+  #knob {
+    position: absolute; width: 42px; height: 42px; border-radius: 50%;
+    left: 32px; top: 32px;
+    background: linear-gradient(145deg, var(--accent), var(--accent2));
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    cursor: grab; touch-action: none;
+  }
+  #knob.grabbed { cursor: grabbing; box-shadow: 0 0 14px rgba(108,248,210,0.55); }
+  #joyLabel {
+    position: absolute; width: 100%; text-align: center; bottom: -16px;
+    font-size: 9px; letter-spacing: 1px; color: var(--text-dim);
+  }
+  #vbtns { display: flex; flex-direction: column; gap: 6px; flex: none; }
+  #vbtns button {
+    width: 34px; height: 30px; border-radius: 8px; border: 1px solid #333b52;
+    background: #1c2130; color: var(--text); font-size: 13px; cursor: pointer;
+    touch-action: none;
+  }
+  #vbtns button:active { background: var(--accent); color: #0d0f14; }
+  #zoomwrap {
+    display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none;
+    font-size: 13px; color: var(--text-dim);
+  }
+  #zoomcol { height: 106px; width: 30px; position: relative; }
+  #zoomSlider {
+    position: absolute; width: 106px; height: 30px;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    accent-color: var(--accent);
+  }
+  #navpad .navtag {
+    position: absolute; top: -8px; left: 14px; font-size: 9px; letter-spacing: 1.2px;
+    color: var(--text-dim); background: var(--panel); padding: 0 6px; border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+
+<div id="panel">
+  <h1>FRACTAL AI TEST 3 — NAVIGATOR EDITION</h1>
+  <div class="subtitle">16 formulas · fusion lab · on-screen 3D flight controls</div>
+
+  <details open>
+    <summary>Fusion Lab</summary>
+    <div class="section-body">
+      <div class="row">
+        <label>Preset</label>
+        <select id="preset">
+          <option value="custom">— custom —</option>
+          <option value="classic-bulb">Classic Mandelbulb</option>
+          <option value="bulb-menger" selected>Menger × Bulb hybrid</option>
+          <option value="mandelbox">Mandelbox (Amazing Box)</option>
+          <option value="amazing-surf">Amazing Surf</option>
+          <option value="buffalo">Buffalo Bulb (abs)</option>
+          <option value="quat3-4d">Quaternion cube z³ (4D)</option>
+          <option value="twisted-menger">Twisted Menger</option>
+          <option value="inverted-box">Inverted Mandelbox</option>
+          <option value="quat-tetra">Quaternion × Tetra (4D)</option>
+          <option value="bristor-kifs">Bristorbrot × Kaleido-IFS</option>
+          <option value="morph-bulb-box">Morph: Bulb ⇋ Mandelbox</option>
+          <option value="union-bulb-menger">Smooth fusion: Bulb ∪ Menger</option>
+          <option value="carved-bulb">Carved Bulb (difference)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Fusion mode</label>
+        <select id="fusionMode">
+          <option value="0">Interleave (MB3D hybrid)</option>
+          <option value="1">Morph blend (DE lerp)</option>
+          <option value="2">Smooth union (weld)</option>
+          <option value="3">Intersection</option>
+          <option value="4">Difference (carve)</option>
+        </select>
+      </div>
+
+      <div class="slot">
+        <div class="slot-title">FORMULA SLOT 1</div>
+        <div class="row"><select id="f0" class="formula-select"></select></div>
+        <div class="row"><label>Repeats</label><input type="range" id="r0" min="1" max="4" step="1" value="2"><span class="val" id="r0-v">2</span></div>
+      </div>
+      <div class="slot s2">
+        <div class="slot-title">FORMULA SLOT 2</div>
+        <div class="row"><select id="f1" class="formula-select"></select></div>
+        <div class="row"><label>Repeats</label><input type="range" id="r1" min="1" max="4" step="1" value="1"><span class="val" id="r1-v">1</span></div>
+      </div>
+      <div class="slot s3">
+        <div class="slot-title">FORMULA SLOT 3 <span style="font-weight:400">(interleave only)</span></div>
+        <div class="row"><select id="f2" class="formula-select"></select></div>
+        <div class="row"><label>Repeats</label><input type="range" id="r2" min="1" max="4" step="1" value="1"><span class="val" id="r2-v">1</span></div>
+      </div>
+
+      <div class="row"><label>Morph A ⇋ B</label><input type="range" id="morph" min="0" max="1" step="0.005" value="0.5"><span class="val" id="morph-v">0.50</span></div>
+      <div class="row"><label>Weld radius</label><input type="range" id="smoothK" min="0.01" max="0.5" step="0.005" value="0.12"><span class="val" id="smoothK-v">0.12</span></div>
+      <div class="row"><label>Step detail</label><input type="range" id="fudge" min="0.25" max="1" step="0.005" value="0.6"><span class="val" id="fudge-v">0.60</span></div>
+      <div class="hint">
+        <b>Interleave</b> cycles the iteration loop through the slots — the Mandelbulb3D hybrid method.
+        The <b>Twist</b> and <b>Sphere inversion</b> entries are <i>transforms</i>: they don't build a shape alone,
+        but interleaved with other formulas they warp the whole fractal (try the Twisted Menger preset).
+      </div>
+    </div>
+  </details>
+
+  <details open>
+    <summary>Formula Parameters</summary>
+    <div class="section-body">
+      <div class="row"><label>Power (bulbs)</label><input type="range" id="power" min="2" max="12" step="0.01" value="5"><span class="val" id="power-v">5.00</span></div>
+      <div class="row"><label>Iterations</label><input type="range" id="iterations" min="2" max="16" step="1" value="12"><span class="val" id="iterations-v">12</span></div>
+      <div class="row"><label>Bailout</label><input type="range" id="bailout" min="4" max="30" step="0.5" value="12"><span class="val" id="bailout-v">12.0</span></div>
+      <div class="row"><label>Fold scale</label><input type="range" id="foldScale" min="1.2" max="3" step="0.01" value="2"><span class="val" id="foldScale-v">2.00</span></div>
+      <div class="row"><label>Fold offset</label><input type="range" id="foldOffset" min="0.5" max="2" step="0.005" value="1"><span class="val" id="foldOffset-v">1.00</span></div>
+      <div class="row"><label>Box scale</label><input type="range" id="boxScale" min="-3" max="3" step="0.01" value="2.2"><span class="val" id="boxScale-v">2.20</span></div>
+      <div class="row"><label>Box fold limit</label><input type="range" id="boxLimit" min="0.5" max="2" step="0.01" value="1"><span class="val" id="boxLimit-v">1.00</span></div>
+      <div class="row"><label>Sphere fold r²</label><input type="range" id="minR2" min="0.05" max="1" step="0.005" value="0.25"><span class="val" id="minR2-v">0.25</span></div>
+      <div class="row"><label>Twist amount</label><input type="range" id="twist" min="-3" max="3" step="0.01" value="1"><span class="val" id="twist-v">1.00</span></div>
+      <div class="row"><label>Inversion radius</label><input type="range" id="invRadius" min="0.2" max="3" step="0.01" value="1"><span class="val" id="invRadius-v">1.00</span></div>
+      <div class="row"><label>KIFS rotation</label><input type="range" id="rotAngle" min="-1.6" max="1.6" step="0.005" value="0.35"><span class="val" id="rotAngle-v">0.35</span></div>
+      <div class="checkbox-row"><input type="checkbox" id="juliaMode"><label for="juliaMode">Julia mode (fixed constant C)</label></div>
+      <div class="row"><label>Julia Cx</label><input type="range" id="juliaX" min="-1.5" max="1.5" step="0.005" value="-0.2"><span class="val" id="juliaX-v">-0.20</span></div>
+      <div class="row"><label>Julia Cy</label><input type="range" id="juliaY" min="-1.5" max="1.5" step="0.005" value="0.7"><span class="val" id="juliaY-v">0.70</span></div>
+      <div class="row"><label>Julia Cz</label><input type="range" id="juliaZ" min="-1.5" max="1.5" step="0.005" value="0.2"><span class="val" id="juliaZ-v">0.20</span></div>
+      <div class="row"><label>Julia Cw (4D)</label><input type="range" id="juliaW" min="-1.5" max="1.5" step="0.005" value="-0.1"><span class="val" id="juliaW-v">-0.10</span></div>
+      <div class="row"><label>4D Slice (w)</label><input type="range" id="sliceW" min="-1.5" max="1.5" step="0.005" value="0"><span class="val" id="sliceW-v">0.00</span></div>
+      <div class="checkbox-row"><input type="checkbox" id="animateSlice"><label for="animateSlice">Animate 4D slice (morph)</label></div>
+    </div>
+  </details>
+
+  <details open>
+    <summary>Colors</summary>
+    <div class="section-body">
+      <div class="row"><label>Base color</label><input type="color" id="colorA" value="#1a66ff"></div>
+      <div class="row"><label>Trap color</label><input type="color" id="colorB" value="#ff9a1a"></div>
+      <div class="row"><label>Glow color</label><input type="color" id="colorGlow" value="#c04cff"></div>
+      <div class="row"><label>Background</label><input type="color" id="colorBg" value="#0a0c12"></div>
+      <div class="row"><label>Palette shift</label><input type="range" id="palShift" min="0" max="1" step="0.005" value="0.2"><span class="val" id="palShift-v">0.20</span></div>
+      <div class="row"><label>Color mix</label><input type="range" id="colMix" min="0" max="1" step="0.005" value="0.7"><span class="val" id="colMix-v">0.70</span></div>
+    </div>
+  </details>
+
+  <details open>
+    <summary>Light · Refraction · Shadows</summary>
+    <div class="section-body">
+      <div class="row"><label>Light color</label><input type="color" id="lightColor" value="#fff4e0"></div>
+      <div class="row"><label>Light azimuth</label><input type="range" id="lightAz" min="0" max="6.283" step="0.01" value="0.9"><span class="val" id="lightAz-v">0.90</span></div>
+      <div class="row"><label>Light elevation</label><input type="range" id="lightEl" min="0.05" max="1.5" step="0.01" value="0.7"><span class="val" id="lightEl-v">0.70</span></div>
+      <div class="row"><label>Intensity</label><input type="range" id="lightInt" min="0" max="3" step="0.01" value="1.3"><span class="val" id="lightInt-v">1.30</span></div>
+      <div class="row"><label>Specular</label><input type="range" id="specular" min="0" max="2" step="0.01" value="0.8"><span class="val" id="specular-v">0.80</span></div>
+      <div class="row"><label>Refraction</label><input type="range" id="refrAmt" min="0" max="1" step="0.005" value="0.25"><span class="val" id="refrAmt-v">0.25</span></div>
+      <div class="row"><label>Refr. index</label><input type="range" id="refrIor" min="1" max="2.4" step="0.01" value="1.33"><span class="val" id="refrIor-v">1.33</span></div>
+      <div class="row"><label>Shadows</label><input type="range" id="shadowStr" min="0" max="1" step="0.005" value="0.85"><span class="val" id="shadowStr-v">0.85</span></div>
+      <div class="row"><label>Shadow soft</label><input type="range" id="shadowSoft" min="2" max="64" step="0.5" value="16"><span class="val" id="shadowSoft-v">16.0</span></div>
+      <div class="row"><label>Amb. occlusion</label><input type="range" id="aoStr" min="0" max="1" step="0.005" value="0.6"><span class="val" id="aoStr-v">0.60</span></div>
+    </div>
+  </details>
+
+  <details open>
+    <summary>Fog & Atmosphere</summary>
+    <div class="section-body">
+      <div class="row"><label>Fog color</label><input type="color" id="fogColor" value="#141a2b"></div>
+      <div class="row"><label>Fog density</label><input type="range" id="fogDensity" min="0" max="1.2" step="0.005" value="0.25"><span class="val" id="fogDensity-v">0.25</span></div>
+      <div class="row"><label>Glow amount</label><input type="range" id="glowAmt" min="0" max="1" step="0.005" value="0.3"><span class="val" id="glowAmt-v">0.30</span></div>
+    </div>
+  </details>
+
+  <details open>
+    <summary>Live Sound (fractal-driven)</summary>
+    <div class="section-body">
+      <div class="row"><button class="btn" id="audioToggle">🔊 Enable Sound</button></div>
+      <div class="row"><label>Volume</label><input type="range" id="volume" min="0" max="1" step="0.005" value="0.35"><span class="val" id="volume-v">0.35</span></div>
+      <div class="row"><label>Base pitch</label><input type="range" id="basePitch" min="40" max="220" step="1" value="80"><span class="val" id="basePitch-v">80</span></div>
+      <div class="row"><label>Harmonics</label><input type="range" id="harmonics" min="0" max="1" step="0.005" value="0.5"><span class="val" id="harmonics-v">0.50</span></div>
+      <div class="row"><label>Reactivity</label><input type="range" id="reactivity" min="0" max="1" step="0.005" value="0.7"><span class="val" id="reactivity-v">0.70</span></div>
+      <div class="hint">The synth probes the fused distance field between the camera and its target every frame —
+        fly with the joystick and the sound tracks the geometry around you.</div>
+    </div>
+  </details>
+
+  <details>
+    <summary>Camera & Quality</summary>
+    <div class="section-body">
+      <div class="row"><label>Resolution</label>
+        <select id="quality">
+          <option value="2">Low (fast)</option>
+          <option value="1.5">Medium</option>
+          <option value="1" selected>High</option>
+          <option value="0.75">Ultra</option>
+        </select>
+      </div>
+      <div class="row"><label>Field of view</label><input type="range" id="fov" min="0.4" max="2" step="0.01" value="1"><span class="val" id="fov-v">1.00</span></div>
+      <div class="row"><label>Surface detail</label><input type="range" id="detail" min="0.4" max="3" step="0.01" value="1"><span class="val" id="detail-v">1.00</span></div>
+      <div class="checkbox-row"><input type="checkbox" id="autoRotate"><label for="autoRotate">Auto-rotate camera</label></div>
+      <div class="hint">Drag the view to orbit · scroll to zoom · use the pad below-left to fly:
+        joystick moves in the horizontal view plane, ▲▼ move up/down, ⌂ re-centers, the vertical slider zooms.</div>
+    </div>
+  </details>
+</div>
+<button id="togglePanel">☰</button>
+<div id="fps"></div>
+
+<!-- ---------- 3D navigation pad ---------- -->
+<div id="navpad">
+  <span class="navtag">3D NAV</span>
+  <div id="joystick">
+    <div id="knob"></div>
+    <div id="joyLabel">MOVE</div>
+  </div>
+  <div id="vbtns">
+    <button id="upBtn" title="Move up">▲</button>
+    <button id="homeBtn" title="Re-center camera">⌂</button>
+    <button id="downBtn" title="Move down">▼</button>
+  </div>
+  <div id="zoomwrap">
+    <span>🔍+</span>
+    <div id="zoomcol"><input type="range" id="zoomSlider" min="0" max="1" step="0.001" value="0.5"></div>
+    <span>🔍−</span>
+  </div>
+</div>
+
+<!-- ============================ SHADERS ============================ -->
+<script id="vs" type="x-shader/x-vertex">
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+</script>
+
+<script id="fs" type="x-shader/x-fragment">
+precision highp float;
+
+uniform vec2  uRes;
+uniform vec3  uCamPos;
+uniform mat3  uCamMat;
+uniform float uFov;
+uniform float uDetail;
+
+uniform int   uMode;
+uniform int   uF0; uniform int uR0;
+uniform int   uF1; uniform int uR1;
+uniform int   uF2; uniform int uR2;
+uniform float uMorph;
+uniform float uSmoothK;
+uniform float uFudge;
+uniform vec3  uDEWA;
+uniform vec3  uDEWB;
+
+uniform int   uIterations;
+uniform float uPower;
+uniform float uBailout;
+uniform float uFoldScale;
+uniform float uFoldOffset;
+uniform float uBoxScale;
+uniform float uBoxLimit;
+uniform float uMinR2;
+uniform float uTwist;
+uniform float uInvRadius;
+uniform float uRotAngle;
+uniform bool  uJuliaMode;
+uniform vec4  uJuliaC;
+uniform float uSliceW;
+
+uniform vec3  uColorA;
+uniform vec3  uColorB;
+uniform vec3  uColorGlow;
+uniform vec3  uColorBg;
+uniform float uPalShift;
+uniform float uColMix;
+
+uniform vec3  uLightColor;
+uniform vec3  uLightDir;
+uniform float uLightInt;
+uniform float uSpecular;
+uniform float uRefrAmt;
+uniform float uRefrIor;
+uniform float uShadowStr;
+uniform float uShadowSoft;
+uniform float uAoStr;
+
+uniform vec3  uFogColor;
+uniform float uFogDensity;
+uniform float uGlowAmt;
+
+#define MAX_ITER 16
+#define MAX_STEPS 150
+#define MAX_DIST 40.0
+#define SURF_EPS 0.0008
+
+int imod(int a, int b) { return a - (a / b) * b; }
+
+vec4 qmul(vec4 a, vec4 b) {
+  return vec4(
+    a.x*b.x - a.y*b.y - a.z*b.z - a.w*b.w,
+    a.x*b.y + a.y*b.x + a.z*b.w - a.w*b.z,
+    a.x*b.z - a.y*b.w + a.z*b.x + a.w*b.y,
+    a.x*b.w + a.y*b.z - a.z*b.y + a.w*b.x
+  );
+}
+
+vec3 rotY(vec3 p, float a) {
+  float c = cos(a), s = sin(a);
+  return vec3(c*p.x + s*p.z, p.y, -s*p.x + c*p.z);
+}
+
+/* ================= FORMULA LIBRARY =================
+   1  Mandelbulb (sine)         2  Mandelbulb (cosine)
+   3  Quaternion z^2+c (4D)     4  Bristorbrot
+   5  Tetra fold (Sierpinski)   6  Menger sponge fold
+   7  Mandelbox (Amazing Box)   8  Kaleido-IFS (rotated)
+   9  Octahedron fold          10  Sphere-fold scale
+  11  Quaternion z^3+c (4D)    12  Buffalo bulb (abs)
+  13  Amazing Surf (xy fold)   14  Cube fold (Cantor)
+  15  Twist (transform)        16  Sphere inversion (transform) */
+void applyFormula(int f, inout vec4 z, inout float dr, vec4 cAdd) {
+  if (f == 1 || f == 2 || f == 12) {            /* bulb power variants */
+    vec3 zp = f == 12 ? abs(z.xyz) : z.xyz;     /* buffalo folds first */
+    float r = max(length(zp), 1e-9);
+    dr = pow(r, uPower - 1.0) * uPower * dr + 1.0;
+    float zr = pow(r, uPower);
+    float ph = atan(zp.y, zp.x) * uPower;
+    if (f == 2) {
+      float th = asin(clamp(zp.z / r, -1.0, 1.0)) * uPower;
+      z.xyz = zr * vec3(cos(th)*cos(ph), cos(th)*sin(ph), sin(th)) + cAdd.xyz;
+    } else {
+      float th = acos(clamp(zp.z / r, -1.0, 1.0)) * uPower;
+      z.xyz = zr * vec3(sin(th)*cos(ph), sin(th)*sin(ph), cos(th)) + cAdd.xyz;
+    }
+  } else if (f == 3) {                          /* quaternion square */
+    float r4 = length(z);
+    dr = 2.0 * r4 * dr + 1.0;
+    z = qmul(z, z) + cAdd;
+  } else if (f == 11) {                         /* quaternion cube */
+    float r4 = length(z);
+    dr = 3.0 * r4 * r4 * dr + 1.0;
+    z = qmul(qmul(z, z), z) + cAdd;
+  } else if (f == 4) {                          /* bristorbrot */
+    float r = length(z.xyz);
+    dr = 2.0 * r * dr + 1.0;
+    vec3 p = z.xyz;
+    z.xyz = vec3(p.x*p.x - p.y*p.y - p.z*p.z,
+                 p.y * (2.0*p.x - p.z),
+                 p.z * (2.0*p.x + p.y)) + cAdd.xyz;
+  } else if (f == 5) {                          /* tetra fold */
+    vec3 p = z.xyz;
+    if (p.x + p.y < 0.0) p.xy = -p.yx;
+    if (p.x + p.z < 0.0) p.xz = -p.zx;
+    if (p.y + p.z < 0.0) p.zy = -p.yz;
+    float s = uFoldScale;
+    z.xyz = p * s - vec3((s - 1.0) * uFoldOffset);
+    dr *= s;
+  } else if (f == 6) {                          /* menger fold */
+    vec3 p = abs(z.xyz);
+    if (p.x < p.y) p.xy = p.yx;
+    if (p.x < p.z) p.xz = p.zx;
+    if (p.y < p.z) p.yz = p.zy;
+    p = p * 3.0 - vec3(2.0 * uFoldOffset);
+    if (p.z < -uFoldOffset) p.z += 2.0 * uFoldOffset;
+    z.xyz = p;
+    dr *= 3.0;
+  } else if (f == 7) {                          /* mandelbox */
+    vec3 p = z.xyz;
+    p = clamp(p, -uBoxLimit, uBoxLimit) * 2.0 - p;
+    float r2 = dot(p, p);
+    float t = 1.0;
+    if (r2 < uMinR2)    t = 1.0 / uMinR2;
+    else if (r2 < 1.0)  t = 1.0 / r2;
+    p *= t; dr *= t;
+    z.xyz = p * uBoxScale + cAdd.xyz;
+    dr = dr * abs(uBoxScale) + 1.0;
+  } else if (f == 13) {                         /* amazing surf: fold x,y only */
+    vec3 p = z.xyz;
+    p.x = clamp(p.x, -uBoxLimit, uBoxLimit) * 2.0 - p.x;
+    p.y = clamp(p.y, -uBoxLimit, uBoxLimit) * 2.0 - p.y;
+    float r2 = dot(p, p);
+    float t = 1.0;
+    if (r2 < uMinR2)    t = 1.0 / uMinR2;
+    else if (r2 < 1.0)  t = 1.0 / r2;
+    p *= t; dr *= t;
+    z.xyz = p * uBoxScale + cAdd.xyz;
+    dr = dr * abs(uBoxScale) + 1.0;
+  } else if (f == 8) {                          /* kaleido-IFS with rotation */
+    vec3 p = abs(z.xyz);
+    p = rotY(p, uRotAngle);
+    float s = uFoldScale;
+    z.xyz = p * s - vec3(1.0, 1.0, 0.5) * (s - 1.0) * uFoldOffset;
+    dr *= s;
+  } else if (f == 9) {                          /* octahedron fold */
+    vec3 p = abs(z.xyz);
+    if (p.x < p.y) p.xy = p.yx;
+    if (p.x < p.z) p.xz = p.zx;
+    float s = uFoldScale;
+    z.xyz = vec3(p.x * s - (s - 1.0) * uFoldOffset, p.y * s, p.z * s);
+    dr *= s;
+  } else if (f == 14) {                         /* cube fold */
+    vec3 p = abs(z.xyz);
+    float s = uFoldScale;
+    z.xyz = p * s - vec3((s - 1.0) * uFoldOffset);
+    dr *= s;
+  } else if (f == 10) {                         /* sphere-fold scale */
+    vec3 p = z.xyz;
+    float r2 = dot(p, p);
+    float t = 1.0;
+    if (r2 < uMinR2)    t = 1.0 / uMinR2;
+    else if (r2 < 1.0)  t = 1.0 / r2;
+    p *= t; dr *= t;
+    z.xyz = p * uBoxScale + cAdd.xyz;
+    dr = dr * abs(uBoxScale) + 1.0;
+  } else if (f == 15) {                         /* twist transform */
+    float a = uTwist * z.y;
+    float c0 = cos(a), s0 = sin(a);
+    z.xz = vec2(c0*z.x + s0*z.z, -s0*z.x + c0*z.z);
+    dr *= 1.0 + abs(uTwist) * 0.4;
+  } else if (f == 16) {                         /* sphere inversion transform */
+    float r2 = max(dot(z.xyz, z.xyz), 1e-9);
+    float ff = (uInvRadius * uInvRadius) / r2;
+    z.xyz *= ff;
+    dr *= ff;
+  }
+}
+
+float deSeq(vec3 p0, int fA, int rA, int fB, int rB, int fC, int rC, vec3 w, out float trap) {
+  int eA = fA > 0 ? rA : 0;
+  int eB = fB > 0 ? rB : 0;
+  int eC = fC > 0 ? rC : 0;
+  int total = eA + eB + eC;
+  trap = 1.0;
+  if (total == 0) return length(p0) - 1.0;
+
+  vec4 z = vec4(p0, uSliceW);
+  vec4 cAdd = uJuliaMode ? uJuliaC : vec4(p0, uSliceW);
+  float dr = 1.0;
+  float r = length(z.xyz);
+  trap = 1e10;
+
+  for (int i = 0; i < MAX_ITER; i++) {
+    if (i >= uIterations) break;
+    r = length(z.xyz);
+    if (r > uBailout) break;
+    int idx = imod(i, total);
+    int f = idx < eA ? fA : (idx < eA + eB ? fB : fC);
+    applyFormula(f, z, dr, cAdd);
+    trap = min(trap, length(z.xyz));
+  }
+  r = max(length(z.xyz), 1e-9);
+  dr = max(abs(dr), 1e-9);
+  float dePoly = 0.5 * log(r) * r / dr;
+  float deLin  = r / dr;
+  float deBox  = (r - 2.0) / dr;
+  return w.x * dePoly + w.y * deLin + w.z * deBox;
+}
+
+float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+float map(vec3 p, out float trap) {
+  float de;
+  if (uMode == 0) {
+    de = deSeq(p, uF0, uR0, uF1, uR1, uF2, uR2, uDEWA, trap);
+  } else {
+    float tA, tB;
+    float dA = deSeq(p, uF0, uR0, 0, 0, 0, 0, uDEWA, tA);
+    float dB = deSeq(p, uF1, uR1, 0, 0, 0, 0, uDEWB, tB);
+    if (uMode == 1)      { de = mix(dA, dB, uMorph); trap = mix(tA, tB, uMorph); }
+    else if (uMode == 2) { de = smin(dA, dB, uSmoothK); trap = dA < dB ? tA : tB; }
+    else if (uMode == 3) { de = max(dA, dB); trap = dA > dB ? tA : tB; }
+    else                 { de = max(dA, -dB); trap = tA; }
+  }
+  return de * uFudge;
+}
+
+float mapD(vec3 p) { float t; return map(p, t); }
+
+vec3 calcNormal(vec3 p, float eps) {
+  vec2 e = vec2(eps, 0.0);
+  return normalize(vec3(
+    mapD(p + e.xyy) - mapD(p - e.xyy),
+    mapD(p + e.yxy) - mapD(p - e.yxy),
+    mapD(p + e.yyx) - mapD(p - e.yyx)
+  ));
+}
+
+float softShadow(vec3 ro, vec3 rd, float k) {
+  float res = 1.0, t = 0.02;
+  for (int i = 0; i < 48; i++) {
+    float h = mapD(ro + rd * t);
+    if (h < 0.0004) return 0.0;
+    res = min(res, k * h / t);
+    t += clamp(h, 0.005, 0.25);
+    if (t > 12.0) break;
+  }
+  return clamp(res, 0.0, 1.0);
+}
+
+float calcAO(vec3 p, vec3 n) {
+  float occ = 0.0, sca = 1.0;
+  for (int i = 0; i < 5; i++) {
+    float h = 0.01 + 0.12 * float(i) / 4.0;
+    float d = mapD(p + n * h);
+    occ += (h - d) * sca;
+    sca *= 0.75;
+  }
+  return clamp(1.0 - 2.0 * occ, 0.0, 1.0);
+}
+
+vec3 palette(float t, vec3 a, vec3 b) {
+  vec3 mid = 0.5 * (a + b);
+  vec3 amp = 0.5 * abs(b - a) + 0.15;
+  return mid + amp * cos(6.28318 * (t + uPalShift + vec3(0.0, 0.33, 0.67)));
+}
+
+vec3 skyColor(vec3 rd) {
+  float h = 0.5 + 0.5 * rd.y;
+  vec3 sky = mix(uColorBg, uFogColor, h * 0.6);
+  float sun = pow(max(dot(rd, uLightDir), 0.0), 32.0);
+  return sky + uLightColor * sun * 0.4 * uLightInt;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;
+  vec3 rd = normalize(uCamMat * vec3(uv * uFov, -2.0));
+  vec3 ro = uCamPos;
+
+  float t = 0.0, glowAcc = 0.0, hitTrap = 0.0;
+  bool hit = false;
+
+  for (int i = 0; i < MAX_STEPS; i++) {
+    vec3 p = ro + rd * t;
+    float tr;
+    float d = map(p, tr);
+    glowAcc += exp(-14.0 * abs(d));
+    float eps = SURF_EPS * uDetail * max(1.0, t * 0.7);
+    if (d < eps) { hit = true; hitTrap = tr; break; }
+    t += d * 0.8;
+    if (t > MAX_DIST) break;
+  }
+
+  vec3 col;
+  if (hit) {
+    vec3 p = ro + rd * t;
+    float eps = SURF_EPS * uDetail * max(1.0, t);
+    vec3 n = calcNormal(p, eps * 1.5);
+
+    float trapT = clamp(hitTrap * uColMix, 0.0, 1.0);
+    vec3 base = mix(uColorA, palette(trapT, uColorA, uColorB), uColMix);
+
+    float dif = max(dot(n, uLightDir), 0.0);
+    float sh = mix(1.0, softShadow(p + n * eps * 4.0, uLightDir, uShadowSoft), uShadowStr);
+    float ao = mix(1.0, calcAO(p, n), uAoStr);
+    vec3 hal = normalize(uLightDir - rd);
+    float spe = pow(max(dot(n, hal), 0.0), 40.0) * uSpecular;
+    float fre = pow(clamp(1.0 + dot(rd, n), 0.0, 1.0), 3.0);
+
+    vec3 lin = vec3(0.0);
+    lin += uLightColor * uLightInt * dif * sh;
+    lin += uFogColor * 2.0 * (0.5 + 0.5 * n.y) * ao * 0.5;
+    lin += uColorGlow * fre * 0.35;
+
+    col = base * lin;
+    col += uLightColor * spe * sh * uLightInt;
+
+    if (uRefrAmt > 0.001) {
+      vec3 refr = refract(rd, n, 1.0 / uRefrIor);
+      if (dot(refr, refr) < 1e-6) refr = reflect(rd, n);
+      vec3 refrCol = skyColor(refr) * 0.7 + palette(trapT + 0.15, uColorA, uColorB) * 0.3;
+      vec3 refl = reflect(rd, n);
+      vec3 reflCol = skyColor(refl);
+      col = mix(col, mix(refrCol, reflCol, fre), uRefrAmt);
+    }
+
+    col *= ao;
+  } else {
+    col = skyColor(rd);
+  }
+
+  col += uColorGlow * glowAcc * 0.012 * uGlowAmt;
+
+  float fogT = hit ? t : MAX_DIST * 0.6;
+  float fog = 1.0 - exp(-uFogDensity * uFogDensity * fogT * fogT * 0.05);
+  col = mix(col, uFogColor, clamp(fog, 0.0, 1.0));
+
+  col = col / (1.0 + col);
+  col = pow(col, vec3(0.4545));
+  gl_FragColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+"use strict";
+/* ============================ WEBGL SETUP ============================ */
+const canvas = document.getElementById("glcanvas");
+const gl = canvas.getContext("webgl", { antialias: false, preserveDrawingBuffer: false });
+if (!gl) { document.body.innerHTML = "<p style='padding:2em'>WebGL not supported.</p>"; throw new Error("no webgl"); }
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, document.getElementById("vs").textContent));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, document.getElementById("fs").textContent));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, "aPos");
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const U = {};
+["uRes","uCamPos","uCamMat","uFov","uDetail",
+ "uMode","uF0","uR0","uF1","uR1","uF2","uR2","uMorph","uSmoothK","uFudge","uDEWA","uDEWB",
+ "uIterations","uPower","uBailout","uFoldScale","uFoldOffset","uBoxScale","uBoxLimit","uMinR2",
+ "uTwist","uInvRadius","uRotAngle","uJuliaMode","uJuliaC","uSliceW",
+ "uColorA","uColorB","uColorGlow","uColorBg","uPalShift","uColMix",
+ "uLightColor","uLightDir","uLightInt","uSpecular","uRefrAmt","uRefrIor","uShadowStr",
+ "uShadowSoft","uAoStr","uFogColor","uFogDensity","uGlowAmt"
+].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+/* ============================ FORMULA LIBRARY (UI) ============================ */
+const FORMULAS = [
+  { id: 0,  name: "— empty —",                cls: "lin"   },
+  { id: 1,  name: "Mandelbulb (sine)",        cls: "poly"  },
+  { id: 2,  name: "Mandelbulb (cosine)",      cls: "poly"  },
+  { id: 3,  name: "Quaternion z²+c (4D)",     cls: "poly"  },
+  { id: 4,  name: "Bristorbrot",              cls: "poly"  },
+  { id: 5,  name: "Tetra fold (Sierpinski)",  cls: "lin"   },
+  { id: 6,  name: "Menger sponge fold",       cls: "lin"   },
+  { id: 7,  name: "Mandelbox (Amazing Box)",  cls: "box"   },
+  { id: 8,  name: "Kaleido-IFS (rotated)",    cls: "lin"   },
+  { id: 9,  name: "Octahedron fold",          cls: "lin"   },
+  { id: 10, name: "Sphere-fold scale",        cls: "box"   },
+  { id: 11, name: "Quaternion z³+c (4D)",     cls: "poly"  },
+  { id: 12, name: "Buffalo bulb (abs)",       cls: "poly"  },
+  { id: 13, name: "Amazing Surf (xy fold)",   cls: "box"   },
+  { id: 14, name: "Cube fold (Cantor)",       cls: "lin"   },
+  { id: 15, name: "Twist ~ transform",        cls: "xform" },
+  { id: 16, name: "Sphere inversion ~ transform", cls: "xform" },
+];
+document.querySelectorAll(".formula-select").forEach(sel => {
+  FORMULAS.forEach(f => {
+    const o = document.createElement("option");
+    o.value = f.id; o.textContent = f.name;
+    sel.appendChild(o);
+  });
+});
+
+/* DE blend weights (poly, linear, box); transforms are weight-neutral */
+function deWeights(slots) {
+  const w = { poly: 0, lin: 0, box: 0, xform: 0 };
+  for (const [f, r] of slots) {
+    if (!f) continue;
+    w[FORMULAS[f].cls] += r;
+  }
+  const s = w.poly + w.lin + w.box;
+  if (!s) return [0, 1, 0];
+  return [w.poly / s, w.lin / s, w.box / s];
+}
+
+/* ============================ STATE & UI ============================ */
+let needsRender = true;
+function paramChanged() { needsRender = true; }
+
+const P = {};
+const sliders = ["r0","r1","r2","morph","smoothK","fudge","power","iterations","bailout",
+  "foldScale","foldOffset","boxScale","boxLimit","minR2","twist","invRadius","rotAngle",
+  "juliaX","juliaY","juliaZ","juliaW","sliceW",
+  "palShift","colMix","lightAz","lightEl","lightInt","specular","refrAmt","refrIor",
+  "shadowStr","shadowSoft","aoStr","fogDensity","glowAmt","volume","basePitch","harmonics",
+  "reactivity","fov","detail"];
+const colors = ["colorA","colorB","colorGlow","colorBg","lightColor","fogColor"];
+const intSliders = new Set(["r0","r1","r2","iterations","basePitch"]);
+
+let applyingPreset = false;
+function markCustom() {
+  if (!applyingPreset) document.getElementById("preset").value = "custom";
+}
+
+sliders.forEach(id => {
+  const el = document.getElementById(id);
+  const vEl = document.getElementById(id + "-v");
+  const update = () => {
+    P[id] = parseFloat(el.value);
+    if (vEl) vEl.textContent = intSliders.has(id) ? el.value : P[id].toFixed(2);
+    paramChanged();
+  };
+  el.addEventListener("input", () => { update(); markCustom(); });
+  update();
+});
+colors.forEach(id => {
+  const el = document.getElementById(id);
+  const update = () => { P[id] = hexToRgb(el.value); paramChanged(); };
+  el.addEventListener("input", update);
+  update();
+});
+["f0","f1","f2"].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener("change", () => { P[id] = parseInt(el.value); paramChanged(); markCustom(); });
+  P[id] = parseInt(el.value);
+});
+const modeEl = document.getElementById("fusionMode");
+modeEl.addEventListener("change", () => { P.mode = parseInt(modeEl.value); paramChanged(); markCustom(); });
+P.mode = parseInt(modeEl.value);
+
+const juliaEl = document.getElementById("juliaMode");
+juliaEl.addEventListener("change", () => { P.juliaMode = juliaEl.checked; paramChanged(); markCustom(); });
+P.juliaMode = juliaEl.checked;
+
+const qualityEl = document.getElementById("quality");
+qualityEl.addEventListener("change", resize);
+document.getElementById("togglePanel").addEventListener("click", () =>
+  document.getElementById("panel").classList.toggle("hidden"));
+
+function hexToRgb(h) {
+  return [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
+}
+
+/* ============================ PRESETS ============================ */
+const PRESETS = {
+  "classic-bulb":      { mode:0, f0:1, r0:1, f1:0, f2:0, power:8, iterations:10, fudge:0.8, dist:3.0 },
+  "bulb-menger":       { mode:0, f0:6, r0:2, f1:1, r1:1, f2:0, power:5, iterations:12, fudge:0.6, foldOffset:1, dist:3.2 },
+  "mandelbox":         { mode:0, f0:7, r0:1, f1:0, f2:0, iterations:13, fudge:0.5, boxScale:2.2, boxLimit:1, minR2:0.25, dist:12.0 },
+  "amazing-surf":      { mode:0, f0:13, r0:1, f1:0, f2:0, iterations:12, fudge:0.5, boxScale:1.8, boxLimit:1, minR2:0.25, dist:9.0 },
+  "buffalo":           { mode:0, f0:12, r0:1, f1:0, f2:0, power:2, iterations:14, fudge:0.7, dist:3.4 },
+  "quat3-4d":          { mode:0, f0:11, r0:1, f1:0, f2:0, iterations:10, fudge:0.7,
+                         juliaMode:true, juliaX:-0.45, juliaY:0.35, juliaZ:0.3, juliaW:-0.2, dist:3.0 },
+  "twisted-menger":    { mode:0, f0:6, r0:2, f1:15, r1:1, f2:0, iterations:12, fudge:0.55, twist:1.2, foldOffset:1, dist:4.0 },
+  "inverted-box":      { mode:0, f0:7, r0:2, f1:16, r1:1, f2:0, iterations:12, fudge:0.45, boxScale:-1.75,
+                         minR2:0.25, invRadius:1.5, dist:8.0 },
+  "quat-tetra":        { mode:0, f0:3, r0:1, f1:5, r1:1, f2:0, iterations:12, fudge:0.7, foldScale:1.6,
+                         juliaMode:true, juliaX:-0.2, juliaY:0.7, juliaZ:0.2, juliaW:-0.1, dist:3.0 },
+  "bristor-kifs":      { mode:0, f0:4, r0:2, f1:8, r1:1, f2:0, iterations:12, fudge:0.65, foldScale:1.8, rotAngle:0.35, dist:3.0 },
+  "morph-bulb-box":    { mode:1, f0:1, r0:1, f1:7, r1:1, f2:0, morph:0.5, power:8, boxScale:2.2, iterations:12, fudge:0.5, dist:4.5 },
+  "union-bulb-menger": { mode:2, f0:1, r0:1, f1:6, r1:1, f2:0, smoothK:0.12, power:8, iterations:11, fudge:0.6, dist:3.0 },
+  "carved-bulb":       { mode:4, f0:1, r0:1, f1:6, r1:1, f2:0, power:8, iterations:11, fudge:0.6, dist:3.0 },
+};
+
+function applyPreset(name) {
+  const pr = PRESETS[name];
+  if (!pr) return;
+  applyingPreset = true;
+  for (const [key, val] of Object.entries(pr)) {
+    if (key === "dist") { cam.dist = val; syncZoomSlider(); continue; }
+    const el = document.getElementById(key === "mode" ? "fusionMode" : key);
+    if (!el) continue;
+    if (el.type === "checkbox") { el.checked = val; el.dispatchEvent(new Event("change")); }
+    else if (el.tagName === "SELECT") { el.value = val; el.dispatchEvent(new Event("change")); }
+    else { el.value = val; el.dispatchEvent(new Event("input")); }
+  }
+  if (!("juliaMode" in pr)) { juliaEl.checked = false; juliaEl.dispatchEvent(new Event("change")); }
+  cam.target = [0, 0, 0];
+  applyingPreset = false;
+  paramChanged();
+}
+const presetEl = document.getElementById("preset");
+presetEl.addEventListener("change", () => { if (presetEl.value !== "custom") applyPreset(presetEl.value); });
+
+/* ============================ CAMERA (orbit around a movable target) ============================ */
+const cam = { yaw: 0.6, pitch: 0.35, dist: 3.2, target: [0, 0, 0] };
+const DIST_MIN = 0.4, DIST_MAX = 20;
+let dragging = false, lastX = 0, lastY = 0;
+canvas.addEventListener("pointerdown", e => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.classList.add("dragging"); canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointerup", e => { dragging = false; canvas.classList.remove("dragging"); });
+canvas.addEventListener("pointermove", e => {
+  if (!dragging) return;
+  cam.yaw   -= (e.clientX - lastX) * 0.005;
+  cam.pitch += (e.clientY - lastY) * 0.005;
+  cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch));
+  lastX = e.clientX; lastY = e.clientY;
+  paramChanged();
+});
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  cam.dist *= Math.pow(1.0012, e.deltaY);
+  cam.dist = Math.max(DIST_MIN, Math.min(DIST_MAX, cam.dist));
+  syncZoomSlider();
+  paramChanged();
+}, { passive: false });
+
+function cameraBasis() {
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const off = [cam.dist * cp * sy, cam.dist * sp, cam.dist * cp * cy];
+  const pos = [cam.target[0] + off[0], cam.target[1] + off[1], cam.target[2] + off[2]];
+  const fwd = norm3([-off[0], -off[1], -off[2]]);
+  const right = norm3(cross3(fwd, [0,1,0]));
+  const up = cross3(right, fwd);
+  return { pos, fwd, right, mat: [right[0],right[1],right[2], up[0],up[1],up[2], -fwd[0],-fwd[1],-fwd[2]] };
+}
+function cross3(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function norm3(a){ const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2]/l]; }
+
+/* ============================ 3D NAV PAD (bottom-left) ============================ */
+const joy = { x: 0, y: 0, active: false };
+const knob = document.getElementById("knob");
+const joyEl = document.getElementById("joystick");
+const JOY_R = 34;
+
+function setKnob(dx, dy) {
+  knob.style.left = (32 + dx) + "px";
+  knob.style.top = (32 + dy) + "px";
+}
+function joyFromEvent(e) {
+  const rect = joyEl.getBoundingClientRect();
+  let dx = e.clientX - (rect.left + rect.width / 2);
+  let dy = e.clientY - (rect.top + rect.height / 2);
+  const l = Math.hypot(dx, dy);
+  if (l > JOY_R) { dx *= JOY_R / l; dy *= JOY_R / l; }
+  joy.x = dx / JOY_R; joy.y = dy / JOY_R;
+  setKnob(dx, dy);
+}
+knob.addEventListener("pointerdown", e => {
+  joy.active = true;
+  knob.classList.add("grabbed");
+  knob.setPointerCapture(e.pointerId);
+  joyFromEvent(e);
+  e.preventDefault();
+});
+knob.addEventListener("pointermove", e => { if (joy.active) joyFromEvent(e); });
+function joyRelease() {
+  joy.active = false; joy.x = 0; joy.y = 0;
+  knob.classList.remove("grabbed");
+  setKnob(0, 0);
+}
+knob.addEventListener("pointerup", joyRelease);
+knob.addEventListener("pointercancel", joyRelease);
+joyEl.addEventListener("pointerdown", e => {   // tap the ring: jump the knob there
+  if (e.target === knob) return;
+  joy.active = true;
+  knob.classList.add("grabbed");
+  knob.setPointerCapture(e.pointerId);
+  joyFromEvent(e);
+});
+
+let moveUp = false, moveDown = false;
+function holdButton(id, set) {
+  const el = document.getElementById(id);
+  el.addEventListener("pointerdown", e => { set(true); el.setPointerCapture(e.pointerId); e.preventDefault(); });
+  el.addEventListener("pointerup", () => set(false));
+  el.addEventListener("pointercancel", () => set(false));
+}
+holdButton("upBtn", v => moveUp = v);
+holdButton("downBtn", v => moveDown = v);
+document.getElementById("homeBtn").addEventListener("click", () => {
+  cam.target = [0, 0, 0];
+  paramChanged();
+});
+
+/* zoom slider ↔ camera distance (log scale; up = zoom in) */
+const zoomSlider = document.getElementById("zoomSlider");
+function syncZoomSlider() {
+  const v = (Math.log(DIST_MAX) - Math.log(cam.dist)) / (Math.log(DIST_MAX) - Math.log(DIST_MIN));
+  zoomSlider.value = Math.max(0, Math.min(1, v));
+}
+zoomSlider.addEventListener("input", () => {
+  const v = parseFloat(zoomSlider.value);
+  cam.dist = Math.exp(Math.log(DIST_MAX) + v * (Math.log(DIST_MIN) - Math.log(DIST_MAX)));
+  paramChanged();
+});
+syncZoomSlider();
+
+/* ============================ CPU-SIDE DE PROBE (drives the audio) ============================ */
+const clamp1 = x => Math.max(-1, Math.min(1, x));
+
+function stepFormula(f, z, dr, c) {
+  const x = z[0], y = z[1], zz = z[2];
+  if (f === 1 || f === 2 || f === 12) {
+    const ax = f === 12 ? Math.abs(x) : x, ay = f === 12 ? Math.abs(y) : y, az = f === 12 ? Math.abs(zz) : zz;
+    const r = Math.max(Math.hypot(ax, ay, az), 1e-9), pw = P.power;
+    const nd = Math.pow(r, pw - 1) * pw * dr + 1;
+    const zr = Math.pow(r, pw), ph = Math.atan2(ay, ax) * pw;
+    if (f === 2) {
+      const th = Math.asin(clamp1(az / r)) * pw;
+      z[0] = zr*Math.cos(th)*Math.cos(ph)+c[0]; z[1] = zr*Math.cos(th)*Math.sin(ph)+c[1]; z[2] = zr*Math.sin(th)+c[2];
+    } else {
+      const th = Math.acos(clamp1(az / r)) * pw;
+      z[0] = zr*Math.sin(th)*Math.cos(ph)+c[0]; z[1] = zr*Math.sin(th)*Math.sin(ph)+c[1]; z[2] = zr*Math.cos(th)+c[2];
+    }
+    return nd;
+  }
+  if (f === 3 || f === 11) {
+    const r4 = Math.hypot(z[0], z[1], z[2], z[3]);
+    const a = z[0], b = z[1], cc = z[2], d = z[3];
+    if (f === 3) {
+      z[0] = a*a - b*b - cc*cc - d*d + c[0];
+      z[1] = 2*a*b + c[1]; z[2] = 2*a*cc + c[2]; z[3] = 2*a*d + c[3];
+      return 2 * r4 * dr + 1;
+    }
+    // z^3 = z * z^2 (quaternion product with real-heavy square)
+    const s0 = a*a - b*b - cc*cc - d*d, s1 = 2*a*b, s2 = 2*a*cc, s3 = 2*a*d;
+    z[0] = a*s0 - b*s1 - cc*s2 - d*s3 + c[0];
+    z[1] = a*s1 + b*s0 + cc*s3 - d*s2 + c[1];
+    z[2] = a*s2 - b*s3 + cc*s0 + d*s1 + c[2];
+    z[3] = a*s3 + b*s2 - cc*s1 + d*s0 + c[3];
+    return 3 * r4 * r4 * dr + 1;
+  }
+  if (f === 4) {
+    const r = Math.hypot(x, y, zz);
+    z[0] = x*x - y*y - zz*zz + c[0];
+    z[1] = y * (2*x - zz) + c[1];
+    z[2] = zz * (2*x + y) + c[2];
+    return 2 * r * dr + 1;
+  }
+  if (f === 5) {
+    let p = [x, y, zz];
+    if (p[0]+p[1] < 0) { const t=p[0]; p[0]=-p[1]; p[1]=-t; }
+    if (p[0]+p[2] < 0) { const t=p[0]; p[0]=-p[2]; p[2]=-t; }
+    if (p[1]+p[2] < 0) { const t=p[1]; p[1]=-p[2]; p[2]=-t; }
+    const s = P.foldScale, o = (s-1) * P.foldOffset;
+    z[0]=p[0]*s-o; z[1]=p[1]*s-o; z[2]=p[2]*s-o;
+    return dr * s;
+  }
+  if (f === 6) {
+    let p = [Math.abs(x), Math.abs(y), Math.abs(zz)];
+    if (p[0]<p[1]) { const t=p[0]; p[0]=p[1]; p[1]=t; }
+    if (p[0]<p[2]) { const t=p[0]; p[0]=p[2]; p[2]=t; }
+    if (p[1]<p[2]) { const t=p[1]; p[1]=p[2]; p[2]=t; }
+    const o = P.foldOffset;
+    z[0]=p[0]*3-2*o; z[1]=p[1]*3-2*o; z[2]=p[2]*3-2*o;
+    if (z[2] < -o) z[2] += 2*o;
+    return dr * 3;
+  }
+  if (f === 7 || f === 10 || f === 13) {
+    let p = [x, y, zz];
+    if (f === 7) {
+      const L = P.boxLimit;
+      for (let i=0;i<3;i++) p[i] = Math.max(-L, Math.min(L, p[i]))*2 - p[i];
+    } else if (f === 13) {
+      const L = P.boxLimit;
+      for (let i=0;i<2;i++) p[i] = Math.max(-L, Math.min(L, p[i]))*2 - p[i];
+    }
+    const r2 = p[0]*p[0]+p[1]*p[1]+p[2]*p[2];
+    let t = 1;
+    if (r2 < P.minR2) t = 1/P.minR2; else if (r2 < 1) t = 1/r2;
+    const s = P.boxScale;
+    for (let i=0;i<3;i++) z[i] = p[i]*t*s + c[i];
+    return dr * t * Math.abs(s) + 1;
+  }
+  if (f === 8) {
+    let p = [Math.abs(x), Math.abs(y), Math.abs(zz)];
+    const a = P.rotAngle, co = Math.cos(a), si = Math.sin(a);
+    const px = co*p[0] + si*p[2], pz = -si*p[0] + co*p[2];
+    p[0] = px; p[2] = pz;
+    const s = P.foldScale, o = (s-1) * P.foldOffset;
+    z[0]=p[0]*s-o; z[1]=p[1]*s-o; z[2]=p[2]*s-0.5*o;
+    return dr * s;
+  }
+  if (f === 9) {
+    let p = [Math.abs(x), Math.abs(y), Math.abs(zz)];
+    if (p[0]<p[1]) { const t=p[0]; p[0]=p[1]; p[1]=t; }
+    if (p[0]<p[2]) { const t=p[0]; p[0]=p[2]; p[2]=t; }
+    const s = P.foldScale;
+    z[0]=p[0]*s-(s-1)*P.foldOffset; z[1]=p[1]*s; z[2]=p[2]*s;
+    return dr * s;
+  }
+  if (f === 14) {
+    const s = P.foldScale, o = (s-1) * P.foldOffset;
+    z[0]=Math.abs(x)*s-o; z[1]=Math.abs(y)*s-o; z[2]=Math.abs(zz)*s-o;
+    return dr * s;
+  }
+  if (f === 15) {
+    const a = P.twist * y, co = Math.cos(a), si = Math.sin(a);
+    z[0] = co*x + si*zz; z[2] = -si*x + co*zz;
+    return dr * (1 + Math.abs(P.twist) * 0.4);
+  }
+  if (f === 16) {
+    const r2 = Math.max(x*x + y*y + zz*zz, 1e-9);
+    const ff = (P.invRadius * P.invRadius) / r2;
+    z[0]*=ff; z[1]*=ff; z[2]*=ff;
+    return dr * ff;
+  }
+  return dr;
+}
+
+function deSeqJS(p0, fA, rA, fB, rB, fC, rC, w) {
+  const eA = fA > 0 ? rA : 0, eB = fB > 0 ? rB : 0, eC = fC > 0 ? rC : 0;
+  const total = eA + eB + eC;
+  if (total === 0) return { d: Math.hypot(...p0) - 1, trap: 1 };
+  const z = [p0[0], p0[1], p0[2], P.sliceW];
+  const cAdd = P.juliaMode ? [P.juliaX, P.juliaY, P.juliaZ, P.juliaW] : [p0[0], p0[1], p0[2], P.sliceW];
+  let dr = 1, trap = 1e10;
+  const maxIt = P.iterations | 0;
+  for (let i = 0; i < maxIt; i++) {
+    const r = Math.hypot(z[0], z[1], z[2]);
+    if (r > P.bailout) break;
+    const idx = i % total;
+    const f = idx < eA ? fA : (idx < eA + eB ? fB : fC);
+    dr = stepFormula(f, z, dr, cAdd);
+    trap = Math.min(trap, Math.hypot(z[0], z[1], z[2]));
+  }
+  const r = Math.max(Math.hypot(z[0], z[1], z[2]), 1e-9);
+  dr = Math.max(Math.abs(dr), 1e-9);
+  const dePoly = 0.5 * Math.log(r) * r / dr;
+  const deLin = r / dr;
+  const deBox = (r - 2) / dr;
+  return { d: w[0]*dePoly + w[1]*deLin + w[2]*deBox, trap };
+}
+
+function probeFractal(p) {
+  const wA = currentWeightsA(), wB = currentWeightsB();
+  if (P.mode === 0) {
+    const res = deSeqJS(p, P.f0, P.r0, P.f1, P.r1, P.f2, P.r2, wA);
+    return { d: res.d * P.fudge, trap: res.trap };
+  }
+  const a = deSeqJS(p, P.f0, P.r0, 0, 0, 0, 0, wA);
+  const b = deSeqJS(p, P.f1, P.r1, 0, 0, 0, 0, wB);
+  let d, trap;
+  if (P.mode === 1)      { d = a.d + (b.d - a.d) * P.morph; trap = a.trap + (b.trap - a.trap) * P.morph; }
+  else if (P.mode === 2) { const k = P.smoothK, h = Math.max(0, Math.min(1, 0.5 + 0.5*(b.d - a.d)/k));
+                           d = b.d + (a.d - b.d)*h - k*h*(1-h); trap = a.d < b.d ? a.trap : b.trap; }
+  else if (P.mode === 3) { d = Math.max(a.d, b.d); trap = a.d > b.d ? a.trap : b.trap; }
+  else                   { d = Math.max(a.d, -b.d); trap = a.trap; }
+  return { d: d * P.fudge, trap };
+}
+
+function currentWeightsA() {
+  return P.mode === 0
+    ? deWeights([[P.f0, P.r0], [P.f1, P.r1], [P.f2, P.r2]])
+    : deWeights([[P.f0, P.r0]]);
+}
+function currentWeightsB() { return deWeights([[P.f1, P.r1]]); }
+
+/* ============================ LIVE AUDIO ENGINE ============================ */
+const Audio = {
+  ctx: null, running: false,
+  master: null, filter: null, panner: null,
+  oscs: [], oscGains: [], lfo: null, lfoGain: null,
+  smooth: { cutoff: 800, detune: 0, pan: 0 },
+
+  start() {
+    if (this.ctx) { this.ctx.resume(); this.running = true; return; }
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.ctx = ctx;
+    this.master = ctx.createGain();
+    this.master.gain.value = P.volume;
+    this.panner = (ctx.createStereoPanner) ? ctx.createStereoPanner() : null;
+    this.filter = ctx.createBiquadFilter();
+    this.filter.type = "lowpass";
+    this.filter.frequency.value = 800;
+    this.filter.Q.value = 4;
+
+    const shaper = ctx.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = i/128 - 1; curve[i] = Math.tanh(1.5*x); }
+    shaper.curve = curve;
+    const delay = ctx.createDelay(1.0);
+    delay.delayTime.value = 0.28;
+    const fb = ctx.createGain(); fb.gain.value = 0.35;
+    const wet = ctx.createGain(); wet.gain.value = 0.3;
+
+    const types = ["sawtooth", "triangle", "sine"];
+    for (let i = 0; i < 3; i++) {
+      const o = ctx.createOscillator();
+      o.type = types[i];
+      o.frequency.value = P.basePitch * (i === 2 ? 0.5 : 1);
+      const g = ctx.createGain();
+      g.gain.value = i === 0 ? 0.5 : 0.3;
+      o.connect(g); g.connect(this.filter);
+      o.start();
+      this.oscs.push(o); this.oscGains.push(g);
+    }
+    this.lfo = ctx.createOscillator();
+    this.lfo.frequency.value = 0.4;
+    this.lfoGain = ctx.createGain();
+    this.lfoGain.gain.value = 120;
+    this.lfo.connect(this.lfoGain); this.lfoGain.connect(this.filter.frequency);
+    this.lfo.start();
+
+    this.filter.connect(shaper);
+    let tail = shaper;
+    if (this.panner) { shaper.connect(this.panner); tail = this.panner; }
+    tail.connect(this.master);
+    tail.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(this.master);
+    this.master.connect(ctx.destination);
+    this.running = true;
+  },
+
+  stop() { if (this.ctx) this.ctx.suspend(); this.running = false; },
+
+  update(dt, probe, camAzimuth) {
+    if (!this.running || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const react = P.reactivity;
+
+    const near = Math.exp(-Math.abs(probe.d) * 3.0);
+    const targetCutoff = 180 + 5200 * Math.pow(near, 1.5) * react + 300 * (1 - react);
+    const trapN = Math.min(1, probe.trap);
+    const targetDetune = (trapN - 0.5) * 60 * react;
+    const targetPan = Math.sin(camAzimuth) * 0.7;
+
+    const k = 1 - Math.exp(-dt * 6);
+    const s = this.smooth;
+    s.cutoff += (targetCutoff - s.cutoff) * k;
+    s.detune += (targetDetune - s.detune) * k;
+    s.pan    += (targetPan - s.pan) * k;
+
+    this.filter.frequency.setTargetAtTime(s.cutoff, t, 0.03);
+    if (this.panner) this.panner.pan.setTargetAtTime(s.pan, t, 0.05);
+
+    const ratio = 1 + (P.power - 2) / 10 * 0.5;
+    const f0 = P.basePitch;
+    this.oscs[0].frequency.setTargetAtTime(f0, t, 0.05);
+    this.oscs[1].frequency.setTargetAtTime(f0 * ratio, t, 0.05);
+    this.oscs[1].detune.setTargetAtTime(s.detune, t, 0.05);
+    this.oscs[2].frequency.setTargetAtTime(f0 * 0.5, t, 0.05);
+    this.oscGains[1].gain.setTargetAtTime(0.08 + 0.3 * P.harmonics, t, 0.1);
+    this.oscGains[2].gain.setTargetAtTime(0.15 + 0.25 * P.harmonics, t, 0.1);
+    this.lfo.frequency.setTargetAtTime(0.15 + P.iterations * 0.06, t, 0.2);
+    this.lfoGain.gain.setTargetAtTime(60 + 220 * react * near, t, 0.1);
+    this.master.gain.setTargetAtTime(P.volume, t, 0.05);
+  }
+};
+
+const audioBtn = document.getElementById("audioToggle");
+audioBtn.addEventListener("click", () => {
+  if (Audio.running) { Audio.stop(); audioBtn.textContent = "🔊 Enable Sound"; audioBtn.classList.remove("active"); }
+  else { Audio.start(); audioBtn.textContent = "🔇 Mute Sound"; audioBtn.classList.add("active"); }
+});
+
+/* ============================ RENDER LOOP ============================ */
+function resize() {
+  const scale = parseFloat(qualityEl.value);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(window.innerWidth * dpr / scale);
+  canvas.height = Math.round(window.innerHeight * dpr / scale);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  needsRender = true;
+}
+window.addEventListener("resize", resize);
+resize();
+
+const fpsEl = document.getElementById("fps");
+let lastT = performance.now(), fpsAcc = 0, fpsN = 0;
+let sliceDir = 1;
+
+function frame(now) {
+  const dt = Math.min(0.1, (now - lastT) / 1000);
+  lastT = now;
+
+  const autoRotate = document.getElementById("autoRotate").checked;
+  const animSlice = document.getElementById("animateSlice").checked;
+  if (autoRotate) { cam.yaw += dt * 0.15; needsRender = true; }
+  if (animSlice) {
+    let w = P.sliceW + sliceDir * dt * 0.12;
+    if (w > 1.2) { w = 1.2; sliceDir = -1; }
+    if (w < -1.2) { w = -1.2; sliceDir = 1; }
+    P.sliceW = w;
+    document.getElementById("sliceW").value = w;
+    document.getElementById("sliceW-v").textContent = w.toFixed(2);
+    needsRender = true;
+  }
+
+  const basis = cameraBasis();
+
+  /* nav pad: joystick flies in the horizontal view plane, buttons move vertically */
+  if (joy.active || moveUp || moveDown) {
+    const sp = cam.dist * 0.7 * dt;
+    const fwdH = norm3([basis.fwd[0], 0, basis.fwd[2]]);
+    cam.target[0] += (basis.right[0] * joy.x - fwdH[0] * joy.y) * sp;
+    cam.target[1] += (moveUp ? sp : 0) - (moveDown ? sp : 0);
+    cam.target[2] += (basis.right[2] * joy.x - fwdH[2] * joy.y) * sp;
+    needsRender = true;
+  }
+
+  const { pos, mat } = cameraBasis();
+
+  if (Audio.running) {
+    const pk = 0.55;
+    const probePt = [
+      pos[0] + (cam.target[0] - pos[0]) * pk,
+      pos[1] + (cam.target[1] - pos[1]) * pk,
+      pos[2] + (cam.target[2] - pos[2]) * pk
+    ];
+    const probe = probeFractal(probePt);
+    Audio.update(dt, probe, cam.yaw);
+  }
+
+  if (needsRender) {
+    needsRender = false;
+    gl.uniform2f(U.uRes, canvas.width, canvas.height);
+    gl.uniform3fv(U.uCamPos, pos);
+    gl.uniformMatrix3fv(U.uCamMat, false, mat);
+    gl.uniform1f(U.uFov, P.fov);
+    gl.uniform1f(U.uDetail, P.detail);
+
+    gl.uniform1i(U.uMode, P.mode);
+    gl.uniform1i(U.uF0, P.f0); gl.uniform1i(U.uR0, P.r0 | 0);
+    gl.uniform1i(U.uF1, P.f1); gl.uniform1i(U.uR1, P.r1 | 0);
+    gl.uniform1i(U.uF2, P.f2); gl.uniform1i(U.uR2, P.r2 | 0);
+    gl.uniform1f(U.uMorph, P.morph);
+    gl.uniform1f(U.uSmoothK, P.smoothK);
+    gl.uniform1f(U.uFudge, P.fudge);
+    gl.uniform3fv(U.uDEWA, currentWeightsA());
+    gl.uniform3fv(U.uDEWB, currentWeightsB());
+
+    gl.uniform1i(U.uIterations, P.iterations | 0);
+    gl.uniform1f(U.uPower, P.power);
+    gl.uniform1f(U.uBailout, P.bailout);
+    gl.uniform1f(U.uFoldScale, P.foldScale);
+    gl.uniform1f(U.uFoldOffset, P.foldOffset);
+    gl.uniform1f(U.uBoxScale, P.boxScale);
+    gl.uniform1f(U.uBoxLimit, P.boxLimit);
+    gl.uniform1f(U.uMinR2, P.minR2);
+    gl.uniform1f(U.uTwist, P.twist);
+    gl.uniform1f(U.uInvRadius, P.invRadius);
+    gl.uniform1f(U.uRotAngle, P.rotAngle);
+    gl.uniform1i(U.uJuliaMode, P.juliaMode ? 1 : 0);
+    gl.uniform4f(U.uJuliaC, P.juliaX, P.juliaY, P.juliaZ, P.juliaW);
+    gl.uniform1f(U.uSliceW, P.sliceW);
+
+    gl.uniform3fv(U.uColorA, P.colorA);
+    gl.uniform3fv(U.uColorB, P.colorB);
+    gl.uniform3fv(U.uColorGlow, P.colorGlow);
+    gl.uniform3fv(U.uColorBg, P.colorBg);
+    gl.uniform1f(U.uPalShift, P.palShift);
+    gl.uniform1f(U.uColMix, P.colMix);
+    gl.uniform3fv(U.uLightColor, P.lightColor);
+    const el = P.lightEl, az = P.lightAz;
+    gl.uniform3f(U.uLightDir, Math.cos(el)*Math.sin(az), Math.sin(el), Math.cos(el)*Math.cos(az));
+    gl.uniform1f(U.uLightInt, P.lightInt);
+    gl.uniform1f(U.uSpecular, P.specular);
+    gl.uniform1f(U.uRefrAmt, P.refrAmt);
+    gl.uniform1f(U.uRefrIor, P.refrIor);
+    gl.uniform1f(U.uShadowStr, P.shadowStr);
+    gl.uniform1f(U.uShadowSoft, P.shadowSoft);
+    gl.uniform1f(U.uAoStr, P.aoStr);
+    gl.uniform3fv(U.uFogColor, P.fogColor);
+    gl.uniform1f(U.uFogDensity, P.fogDensity);
+    gl.uniform1f(U.uGlowAmt, P.glowAmt);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  fpsAcc += dt; fpsN++;
+  if (fpsAcc > 0.5) {
+    fpsEl.textContent = Math.round(fpsN / fpsAcc) + " fps";
+    fpsAcc = 0; fpsN = 0;
+  }
+  requestAnimationFrame(frame);
+}
+
+applyPreset("bulb-menger");
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

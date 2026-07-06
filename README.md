@@ -47,6 +47,15 @@ The second experiment expands the formula library to **10 formulas** and adds Ma
 - Julia mode with a 4D constant, animatable 4D slice, and **8 curated presets** (Menger × Bulb, Mandelbox, Quaternion × Tetra 4D, Bristorbrot × KIFS, morph/weld/carve demos…)
 - Same lighting, refraction, shadows, fog, and **live fractal-driven sound** engine — the synth probes the *fused* field, so it hears the hybrid
 
+## `fractal-ai-test3.html` — Navigator Edition
+
+The third experiment adds on-screen flight controls and grows the library to **16 formulas**:
+
+- **3D navigation pad** (bottom-left corner): a virtual joystick that flies the camera through the horizontal view plane, ▲/▼ buttons for vertical movement, a ⌂ re-center button, and a **vertical zoom/dezoom slider** (log scale, synced with the mouse wheel)
+- **6 new formulas**: Quaternion z³+c (4D), Buffalo bulb (abs), Amazing Surf (xy box fold), Cube fold (Cantor), plus two Mandelbulb3D-style *transforms* — **Twist** and **Sphere inversion** — that warp any hybrid they're interleaved into
+- **New parameters**: bailout, fold offset, sphere-fold radius, twist amount, inversion radius, and a surface-detail control
+- **13 presets** including Amazing Surf, Buffalo Bulb, Quaternion cube, Twisted Menger, and the negative-scale Inverted Mandelbox
+
 ## Controls
 
 - **Drag** to orbit the camera, **scroll** to zoom
