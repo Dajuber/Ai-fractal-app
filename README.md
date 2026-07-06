@@ -51,7 +51,7 @@ The second experiment expands the formula library to **10 formulas** and adds Ma
 
 The third experiment adds on-screen flight controls and grows the library to **16 formulas**:
 
-- **3D navigation pad** (bottom-left corner): a virtual joystick that flies the camera through the horizontal view plane, ▲/▼ buttons for vertical movement, a ⌂ re-center button, and a **vertical zoom/dezoom slider** (log scale, synced with the mouse wheel)
+- **3D navigation pad** (bottom-right corner): a virtual joystick that flies the camera through the horizontal view plane, ▲/▼ buttons for vertical movement, a ⌂ re-center button, and a **vertical zoom/dezoom slider** (log scale, synced with the mouse wheel)
 - **6 new formulas**: Quaternion z³+c (4D), Buffalo bulb (abs), Amazing Surf (xy box fold), Cube fold (Cantor), plus two Mandelbulb3D-style *transforms* — **Twist** and **Sphere inversion** — that warp any hybrid they're interleaved into
 - **New parameters**: bailout, fold offset, sphere-fold radius, twist amount, inversion radius, and a surface-detail control
 - **13 presets** including Amazing Surf, Buffalo Bulb, Quaternion cube, Twisted Menger, and the negative-scale Inverted Mandelbox
