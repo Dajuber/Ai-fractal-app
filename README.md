@@ -36,6 +36,17 @@ The synthesizer (Web Audio API) doesn't just play a drone — it **probes the fr
 
 Change any fractal parameter or move the camera and the sound follows in real time. Controls: volume, base pitch, harmonic richness, reactivity.
 
+## `fractal-ai-test2.html` — Hybrid Fusion Explorer
+
+The second experiment expands the formula library to **10 formulas** and adds Mandelbulb3D-style **formula fusion**:
+
+- **Formulas**: Mandelbulb (sine & cosine variants), Quaternion z²+c (4D), Bristorbrot, Tetra fold (Sierpinski), Menger sponge fold, Mandelbox (Amazing Box), rotated Kaleido-IFS, Octahedron fold, Sphere-fold scale (Amazing-Surf style)
+- **3 formula slots with repeat counts** — in *Interleave* mode the iteration loop cycles through the slots exactly like Mandelbulb3D hybrids (e.g. 2× Menger fold, then 1× bulb power, repeat)
+- **4 more fusion modes** that combine the finished distance fields of slots 1 and 2: **Morph blend** (lerp between two fractals), **Smooth union** (weld), **Intersection**, and **Difference** (carve B out of A)
+- Adaptive distance-estimator blending per formula class (escape-time / IFS / box-fold) plus a **Step detail** slider (MB3D's raystep multiplier) to trade speed for hole-free surfaces
+- Julia mode with a 4D constant, animatable 4D slice, and **8 curated presets** (Menger × Bulb, Mandelbox, Quaternion × Tetra 4D, Bristorbrot × KIFS, morph/weld/carve demos…)
+- Same lighting, refraction, shadows, fog, and **live fractal-driven sound** engine — the synth probes the *fused* field, so it hears the hybrid
+
 ## Controls
 
 - **Drag** to orbit the camera, **scroll** to zoom
