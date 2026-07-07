@@ -56,6 +56,18 @@ The third experiment adds on-screen flight controls and grows the library to **1
 - **New parameters**: bailout, fold offset, sphere-fold radius, twist amount, inversion radius, and a surface-detail control
 - **13 presets** including Amazing Surf, Buffalo Bulb, Quaternion cube, Twisted Menger, and the negative-scale Inverted Mandelbox
 
+## `fractal-ai-test4.html` — MB3D Homage
+
+The fourth experiment is a full-on modern web tribute to the Mandelbulb3D workflow:
+
+- **27 formulas** organized MB3D-style into groups: *Bulbs* (sine, cosine, Mandelbar/tricorn, Buffalo, Bristorbrot), *Quaternions* (z², z³, z⁴ — all true 4D), *Kali*, *IFS folds* (tetra, Menger, cube, octahedron, Kaleido-IFS), *Box family* (Mandelbox, Amazing Surf, sphere-fold scale), and **10 transforms** (n-gon kaleido, box fold, sphere fold, scale+translate, rotate XYZ, twist, sphere inversion, **Hopf 4D double rotation**, sine waves, mirror)
+- **4 hybrid slots** with per-slot repeat counts — the full MB3D hybrid engine — plus the four DE fusion modes
+- **60+ parameters** in a tabbed, MB3D-like interface: Formulas · Params · Color · Light · Env · Sound · View
+- **Parameter files**: Export/Import your fractal as JSON — the web equivalent of MB3D's `.m3p` files
+- **🎲 Randomizer** that generates sensible random hybrids
+- New rendering features: **one-bounce raymarched reflections**, a second **fill light**, specular sharpness, **orbit-trap modes** (sphere/cylinder/planes), gamma and vignette post-processing
+- 19 curated presets, from the classic Mandelbulb to Hopf-rotated 4D quaternions and Kali × Bulb corals
+
 ## Controls
 
 - **Drag** to orbit the camera, **scroll** to zoom
